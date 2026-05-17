@@ -142,6 +142,153 @@ async function run() {
 
 
 
+    // CONTEST ROUTES
+    // =====================
+
+    // Get all approved contests (public) with search & filter
+    app.get('/contests', async (req, res) => {
+      const { type, search, page = 1, limit = 10 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+
+      let query = { status: 'approved' };
+      if (type && type !== 'all') query.contestType = type;
+      if (search) query.contestType = { $regex: search, $options: 'i' };
+
+      const total = await contestsCollection.countDocuments(query);
+      const contests = await contestsCollection
+        .find(query)
+        .sort({ participantsCount: -1 })
+        .skip(skip)
+        .limit(parseInt(limit))
+        .toArray();
+
+      res.send({ contests, total, totalPages: Math.ceil(total / parseInt(limit)) });
+    });
+
+    // Get popular contests (top 5 by participants)
+    app.get('/contests/popular', async (req, res) => {
+      const contests = await contestsCollection
+        .find({ status: 'approved' })
+        .sort({ participantsCount: -1 })
+        .limit(5)
+        .toArray();
+      res.send(contests);
+    });
+
+    // Get single contest details
+    app.get('/contests/:id', async (req, res) => {
+      const id = req.params.id;
+      const contest = await contestsCollection.findOne({ _id: new ObjectId(id) });
+      res.send(contest);
+    });
+
+    // Get all contests for Admin
+    app.get('/admin/contests', verifyToken, verifyAdmin, async (req, res) => {
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 10;
+      const skip = (page - 1) * limit;
+
+      const total = await contestsCollection.countDocuments();
+      const contests = await contestsCollection
+        .find()
+        .skip(skip)
+        .limit(limit)
+        .toArray();
+
+      res.send({ contests, total, totalPages: Math.ceil(total / limit) });
+    });
+
+    // Get creator's own contests
+    app.get('/contests/creator/:email', verifyToken, verifyCreator, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      const contests = await contestsCollection
+        .find({ creatorEmail: email })
+        .toArray();
+      res.send(contests);
+    });
+
+    // Create a new contest (Creator only)
+    app.post('/contests', verifyToken, verifyCreator, async (req, res) => {
+      const contest = req.body;
+      const newContest = {
+        ...contest,
+        status: 'pending',
+        participantsCount: 0,
+        winner: null,
+        createdAt: new Date(),
+      };
+      const result = await contestsCollection.insertOne(newContest);
+      res.send(result);
+    });
+
+    // Update contest (Creator only, only if pending)
+    app.put('/contests/:id', verifyToken, verifyCreator, async (req, res) => {
+      const id = req.params.id;
+      const contestData = req.body;
+
+      const contest = await contestsCollection.findOne({ _id: new ObjectId(id) });
+      if (!contest) return res.status(404).send({ message: 'Contest not found' });
+      if (contest.status !== 'pending') {
+        return res.status(403).send({ message: 'Cannot edit approved/rejected contest' });
+      }
+      if (contest.creatorEmail !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+
+      const result = await contestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { ...contestData, updatedAt: new Date() } }
+      );
+      res.send(result);
+    });
+
+    // Delete contest (Creator only, pending only)
+    app.delete('/contests/:id', verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const email = req.decoded.email;
+      const user = await usersCollection.findOne({ email });
+
+      const contest = await contestsCollection.findOne({ _id: new ObjectId(id) });
+      if (!contest) return res.status(404).send({ message: 'Contest not found' });
+
+      // Admin can delete any, creator only pending own
+      if (user.role !== 'admin') {
+        if (contest.creatorEmail !== email) {
+          return res.status(403).send({ message: 'Forbidden access' });
+        }
+        if (contest.status !== 'pending') {
+          return res.status(403).send({ message: 'Cannot delete approved/rejected contest' });
+        }
+      }
+
+      const result = await contestsCollection.deleteOne({ _id: new ObjectId(id) });
+      res.send(result);
+    });
+
+    // Admin: Approve contest
+    app.patch('/contests/approve/:id', verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const result = await contestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: 'approved' } }
+      );
+      res.send(result);
+    });
+
+    // Admin: Reject contest
+    app.patch('/contests/reject/:id', verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const result = await contestsCollection.updateOne(
+        { _id: new ObjectId(id) },
+        { $set: { status: 'rejected' } }
+      );
+      res.send(result);
+    });
+
+
 
     console.log('Successfully connected to MongoDB!');
   } finally {
