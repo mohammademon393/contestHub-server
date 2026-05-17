@@ -460,6 +460,49 @@ async function run() {
     });
 
 
+    // LEADERBOARD ROUTE
+    // =====================
+
+    app.get('/leaderboard', async (req, res) => {
+      const users = await usersCollection
+        .find({ winCount: { $gt: 0 } })
+        .sort({ winCount: -1 })
+        .limit(20)
+        .toArray();
+
+      // Remove sensitive fields
+      const leaderboard = users.map(u => ({
+        name: u.name,
+        email: u.email,
+        photoURL: u.photoURL,
+        winCount: u.winCount,
+        participatedCount: u.participatedCount,
+      }));
+
+      res.send(leaderboard);
+    });
+
+    // =====================
+    // WINNER ADVERTISEMENT
+    // =====================
+
+    app.get('/winners', async (req, res) => {
+      const contests = await contestsCollection
+        .find({ winner: { $ne: null }, status: 'approved' })
+        .sort({ createdAt: -1 })
+        .limit(6)
+        .toArray();
+      res.send(contests);
+    });
+
+
+
+
+
+
+
+
+
 
 
 
