@@ -359,6 +359,105 @@ async function run() {
     });
 
 
+    // SUBMISSION ROUTES
+    // =====================
+
+    // Submit task
+    app.post('/submissions', verifyToken, async (req, res) => {
+      const submission = req.body;
+      const { contestId, userEmail } = submission;
+
+      // Check if already submitted
+      const existing = await submissionsCollection.findOne({ contestId, userEmail });
+      if (existing) {
+        // Update existing submission
+        const result = await submissionsCollection.updateOne(
+          { contestId, userEmail },
+          { $set: { ...submission, submittedAt: new Date() } }
+        );
+        return res.send(result);
+      }
+
+      const newSubmission = {
+        ...submission,
+        status: 'submitted',
+        isWinner: false,
+        submittedAt: new Date(),
+      };
+      const result = await submissionsCollection.insertOne(newSubmission);
+      res.send(result);
+    });
+
+    // Get submissions for a contest (Creator only)
+    app.get('/submissions/contest/:contestId', verifyToken, verifyCreator, async (req, res) => {
+      const { contestId } = req.params;
+      const submissions = await submissionsCollection
+        .find({ contestId })
+        .toArray();
+      res.send(submissions);
+    });
+
+    // Get all submissions for creator's contests
+    app.get('/submissions/creator/:email', verifyToken, verifyCreator, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      // Get all contests by this creator
+      const contests = await contestsCollection
+        .find({ creatorEmail: email })
+        .toArray();
+      const contestIds = contests.map(c => c._id.toString());
+
+      const submissions = await submissionsCollection
+        .find({ contestId: { $in: contestIds } })
+        .toArray();
+      res.send(submissions);
+    });
+
+    // Declare winner
+    app.patch('/submissions/winner/:id', verifyToken, verifyCreator, async (req, res) => {
+      const submissionId = req.params.id;
+
+      const submission = await submissionsCollection.findOne({ _id: new ObjectId(submissionId) });
+      if (!submission) return res.status(404).send({ message: 'Submission not found' });
+
+      const contest = await contestsCollection.findOne({ _id: new ObjectId(submission.contestId) });
+      if (contest.creatorEmail !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      if (contest.winner) {
+        return res.status(400).send({ message: 'Winner already declared' });
+      }
+
+      // Mark submission as winner
+      await submissionsCollection.updateOne(
+        { _id: new ObjectId(submissionId) },
+        { $set: { isWinner: true } }
+      );
+
+      // Update contest with winner info
+      await contestsCollection.updateOne(
+        { _id: new ObjectId(submission.contestId) },
+        {
+          $set: {
+            winner: {
+              name: submission.userName,
+              email: submission.userEmail,
+              photo: submission.userPhoto,
+            }
+          }
+        }
+      );
+
+      // Update winner's winCount
+      await usersCollection.updateOne(
+        { email: submission.userEmail },
+        { $inc: { winCount: 1 } }
+      );
+
+      res.send({ message: 'Winner declared successfully' });
+    });
 
 
 
