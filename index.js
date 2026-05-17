@@ -289,6 +289,80 @@ async function run() {
     });
 
 
+    // PAYMENT / REGISTRATION ROUTES
+    // =====================
+
+    // Register for contest (after payment)
+    app.post('/payments', verifyToken, async (req, res) => {
+      const payment = req.body;
+      const { contestId, userEmail } = payment;
+
+      // Check if already registered
+      const existing = await paymentsCollection.findOne({ contestId, userEmail });
+      if (existing) return res.status(400).send({ message: 'Already registered' });
+
+      const newPayment = {
+        ...payment,
+        status: 'paid',
+        paidAt: new Date(),
+      };
+      const result = await paymentsCollection.insertOne(newPayment);
+
+      // Increment participant count
+      await contestsCollection.updateOne(
+        { _id: new ObjectId(contestId) },
+        { $inc: { participantsCount: 1 } }
+      );
+
+      // Update user participatedCount
+      await usersCollection.updateOne(
+        { email: userEmail },
+        { $inc: { participatedCount: 1 } }
+      );
+
+      res.send(result);
+    });
+
+    // Check if user registered for a contest
+    app.get('/payments/check', verifyToken, async (req, res) => {
+      const { contestId, userEmail } = req.query;
+      if (userEmail !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      const payment = await paymentsCollection.findOne({ contestId, userEmail });
+      res.send({ registered: !!payment });
+    });
+
+    // Get user's participated contests
+    app.get('/payments/user/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      const payments = await paymentsCollection
+        .find({ userEmail: email })
+        .sort({ paidAt: -1 })
+        .toArray();
+
+      // Get contest details for each payment
+      const contestIds = payments.map(p => new ObjectId(p.contestId));
+      const contests = await contestsCollection
+        .find({ _id: { $in: contestIds } })
+        .toArray();
+
+      const result = payments.map(payment => {
+        const contest = contests.find(c => c._id.toString() === payment.contestId);
+        return { ...payment, contest };
+      });
+
+      res.send(result);
+    });
+
+
+
+
+
+
 
     console.log('Successfully connected to MongoDB!');
   } finally {
