@@ -39,6 +39,28 @@ async function run() {
     const submissionsCollection = db.collection('submissions');
     const paymentsCollection = db.collection('payments');
 
+
+    // Verify Admin Middleware
+    const verifyAdmin = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== 'admin') return res.status(403).send({ message: 'Forbidden access' });
+      next();
+    };
+
+    // Verify Creator Middleware
+    const verifyCreator = async (req, res, next) => {
+      const email = req.decoded.email;
+      const user = await usersCollection.findOne({ email });
+      if (user?.role !== 'creator' && user?.role !== 'admin') {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      next();
+    };
+
+
+
+
     console.log('Successfully connected to MongoDB!');
   } finally {
     // Keep connection alive
