@@ -18,7 +18,34 @@ app.use(cors({
 }));
 app.use(express.json());
 
+// MongoDB Connection
+const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mongodb.net/?retryWrites=true&w=majority`;
 
+const client = new MongoClient(uri, {
+  serverApi: {
+    version: ServerApiVersion.v1,
+    strict: true,
+    deprecationErrors: true,
+  }
+});
+
+async function run() {
+  try {
+    const db = client.db('contestHubDB');
+
+    // Collections
+    const usersCollection = db.collection('users');
+    const contestsCollection = db.collection('contests');
+    const submissionsCollection = db.collection('submissions');
+    const paymentsCollection = db.collection('payments');
+
+    console.log('Successfully connected to MongoDB!');
+  } finally {
+    // Keep connection alive
+  }
+}
+
+run().catch(console.dir);
 
 app.get('/', (req, res) => {
   res.send('ContestHub Server is running!');
