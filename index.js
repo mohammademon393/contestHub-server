@@ -495,7 +495,29 @@ async function run() {
       res.send(contests);
     });
 
+    // STATS ROUTE
+    // =====================
 
+    app.get('/stats', async (req, res) => {
+      const totalContests = await contestsCollection.countDocuments({ status: 'approved' });
+      const totalUsers = await usersCollection.countDocuments();
+      const totalWinners = await contestsCollection.countDocuments({ winner: { $ne: null } });
+      const totalSubmissions = await submissionsCollection.countDocuments();
+
+      res.send({ totalContests, totalUsers, totalWinners, totalSubmissions });
+    });
+
+    // User's winning contests
+    app.get('/users/wins/:email', verifyToken, async (req, res) => {
+      const email = req.params.email;
+      if (email !== req.decoded.email) {
+        return res.status(403).send({ message: 'Forbidden access' });
+      }
+      const wonContests = await contestsCollection
+        .find({ 'winner.email': email })
+        .toArray();
+      res.send(wonContests);
+    });
 
 
 
