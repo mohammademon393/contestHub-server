@@ -18,6 +18,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
+//  ---- 1
 // MongoDB Connection
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -29,6 +30,19 @@ const client = new MongoClient(uri, {
   }
 });
 
+// JWT Middleware
+const verifyToken = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) return res.status(401).send({ message: 'Unauthorized access' });
+
+  const token = authHeader.split(' ')[1];
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) return res.status(401).send({ message: 'Unauthorized access' });
+    req.decoded = decoded;
+    next();
+  });
+};
+
 async function run() {
   try {
     const db = client.db('contestHubDB');
@@ -38,7 +52,6 @@ async function run() {
     const contestsCollection = db.collection('contests');
     const submissionsCollection = db.collection('submissions');
     const paymentsCollection = db.collection('payments');
-
 
     // Verify Admin Middleware
     const verifyAdmin = async (req, res, next) => {
@@ -58,7 +71,7 @@ async function run() {
       next();
     };
 
-
+    // =====================
     // AUTH ROUTES
     // =====================
 
@@ -69,7 +82,7 @@ async function run() {
       res.send({ token });
     });
 
-
+    // =====================
     // USER ROUTES
     // =====================
 
@@ -151,8 +164,7 @@ async function run() {
       res.send(result);
     });
 
-
-
+    // =====================
     // CONTEST ROUTES
     // =====================
 
@@ -299,7 +311,7 @@ async function run() {
       res.send(result);
     });
 
-
+    // =====================
     // PAYMENT / REGISTRATION ROUTES
     // =====================
 
@@ -369,7 +381,7 @@ async function run() {
       res.send(result);
     });
 
-
+    // =====================
     // SUBMISSION ROUTES
     // =====================
 
@@ -470,7 +482,7 @@ async function run() {
       res.send({ message: 'Winner declared successfully' });
     });
 
-
+    // =====================
     // LEADERBOARD ROUTE
     // =====================
 
@@ -506,6 +518,7 @@ async function run() {
       res.send(contests);
     });
 
+    // =====================
     // STATS ROUTE
     // =====================
 
@@ -529,15 +542,6 @@ async function run() {
         .toArray();
       res.send(wonContests);
     });
-
-
-
-
-
-
-
-
-
 
     console.log('Successfully connected to MongoDB!');
   } finally {
