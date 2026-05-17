@@ -59,6 +59,17 @@ async function run() {
     };
 
 
+    // AUTH ROUTES
+    // =====================
+
+    // Generate JWT Token
+    app.post('/jwt', async (req, res) => {
+      const user = req.body;
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '7d' });
+      res.send({ token });
+    });
+
+
     // USER ROUTES
     // =====================
 
